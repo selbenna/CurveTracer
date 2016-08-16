@@ -72,45 +72,34 @@ class CurveTracerWidget(ScriptedLoadableModuleWidget):
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
 
     #
-    # input volume selector
+    # input label map selector
     #
-    self.inputSelector = slicer.qMRMLNodeComboBox()
-    self.inputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.inputSelector.selectNodeUponCreation = True
-    self.inputSelector.addEnabled = False
-    self.inputSelector.removeEnabled = False
-    self.inputSelector.noneEnabled = False
-    self.inputSelector.showHidden = False
-    self.inputSelector.showChildNodeTypes = False
-    self.inputSelector.setMRMLScene( slicer.mrmlScene )
-    self.inputSelector.setToolTip( "Pick the input to the algorithm." )
-    parametersFormLayout.addRow("Input Volume: ", self.inputSelector)
+    self.inputLabelSelector = slicer.qMRMLNodeComboBox()
+    self.inputLabelSelector.nodeTypes = ["vtkMRMLLabelMapVolumeNode"]
+    self.inputLabelSelector.selectNodeUponCreation = True
+    self.inputLabelSelector.addEnabled = False
+    self.inputLabelSelector.removeEnabled = False
+    self.inputLabelSelector.noneEnabled = False
+    self.inputLabelSelector.showHidden = False
+    self.inputLabelSelector.showChildNodeTypes = False
+    self.inputLabelSelector.setMRMLScene( slicer.mrmlScene )
+    self.inputLabelSelector.setToolTip( "Pick the input label map." )
+    parametersFormLayout.addRow("Label Map: ", self.inputLabelSelector)
 
     #
-    # output volume selector
+    # input fiducials (trajectory) selector
     #
-    self.outputSelector = slicer.qMRMLNodeComboBox()
-    self.outputSelector.nodeTypes = ["vtkMRMLScalarVolumeNode"]
-    self.outputSelector.selectNodeUponCreation = True
-    self.outputSelector.addEnabled = True
-    self.outputSelector.removeEnabled = True
-    self.outputSelector.noneEnabled = True
-    self.outputSelector.showHidden = False
-    self.outputSelector.showChildNodeTypes = False
-    self.outputSelector.setMRMLScene( slicer.mrmlScene )
-    self.outputSelector.setToolTip( "Pick the output to the algorithm." )
-    parametersFormLayout.addRow("Output Volume: ", self.outputSelector)
-
-    #
-    # threshold value
-    #
-    self.imageThresholdSliderWidget = ctk.ctkSliderWidget()
-    self.imageThresholdSliderWidget.singleStep = 0.1
-    self.imageThresholdSliderWidget.minimum = -100
-    self.imageThresholdSliderWidget.maximum = 100
-    self.imageThresholdSliderWidget.value = 0.5
-    self.imageThresholdSliderWidget.setToolTip("Set threshold value for computing the output image. Voxels that have intensities lower than this value will set to zero.")
-    parametersFormLayout.addRow("Image threshold", self.imageThresholdSliderWidget)
+    self.inputFiducialSelector = slicer.qMRMLNodeComboBox()
+    self.inputFiducialSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+    self.inputFiducialSelector.selectNodeUponCreation = True
+    self.inputFiducialSelector.addEnabled = True
+    self.inputFiducialSelector.removeEnabled = True
+    self.inputFiducialSelector.noneEnabled = False
+    self.inputFiducialSelector.showHidden = False
+    self.inputFiducialSelector.showChildNodeTypes = False
+    self.inputFiducialSelector.setMRMLScene( slicer.mrmlScene )
+    self.inputFiducialSelector.setToolTip( "Pick the trajectory." )
+    parametersFormLayout.addRow("Trajectory: ", self.inputFiducialSelector)
 
     #
     # Apply Button
@@ -122,8 +111,8 @@ class CurveTracerWidget(ScriptedLoadableModuleWidget):
 
     # connections
     self.applyButton.connect('clicked(bool)', self.onApplyButton)
-    self.inputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
-    self.outputSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.inputLabelSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
+    self.inputFiducialSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onSelect)
 
     # Add vertical spacer
     self.layout.addStretch(1)
@@ -135,12 +124,12 @@ class CurveTracerWidget(ScriptedLoadableModuleWidget):
     pass
 
   def onSelect(self):
-    self.applyButton.enabled = self.inputSelector.currentNode() and self.outputSelector.currentNode()
+    self.applyButton.enabled = self.inputLabelSelector.currentNode() and self.inputFiducialSelector.currentNode()
 
   def onApplyButton(self):
     logic = CurveTracerLogic()
-    imageThreshold = self.imageThresholdSliderWidget.value
-    logic.run(self.inputSelector.currentNode(), self.outputSelector.currentNode(), imageThreshold)
+    imageThreshold = 0
+    logic.run(self.inputLabelSelector.currentNode(), self.inputFiducialSelector.currentNode(), imageThreshold)
 
   def onReload(self,moduleName="CurveTracer"):
     """Generic reload method for any scripted module.
