@@ -128,8 +128,7 @@ class CurveTracerWidget(ScriptedLoadableModuleWidget):
 
   def onApplyButton(self):
     logic = CurveTracerLogic()
-    imageThreshold = 0
-    logic.run(self.inputLabelSelector.currentNode(), self.inputFiducialSelector.currentNode(), imageThreshold)
+    logic.run(self.inputLabelSelector.currentNode(), self.inputFiducialSelector.currentNode())
 
   def onReload(self,moduleName="CurveTracer"):
     """Generic reload method for any scripted module.
@@ -164,17 +163,14 @@ class CurveTracerLogic(ScriptedLoadableModuleLogic):
       return False
     return True
 
-  def isValidInputOutputData(self, inputVolumeNode, outputVolumeNode):
+  def isValidInputOutputData(self, inputLabelMapNode, inputFiducialNode):
     """Validates if the output is not the same as input
     """
-    if not inputVolumeNode:
-      logging.debug('isValidInputOutputData failed: no input volume node defined')
+    if not inputLabelMapNode:
+      logging.debug('isValidInputOutputData failed: no input label map node defined')
       return False
-    if not outputVolumeNode:
-      logging.debug('isValidInputOutputData failed: no output volume node defined')
-      return False
-    if inputVolumeNode.GetID()==outputVolumeNode.GetID():
-      logging.debug('isValidInputOutputData failed: input and output volume is the same. Create a new volume for output to avoid this error.')
+    if not inputFiducialNode:
+      logging.debug('isValidInputOutputData failed: no input fiducial  node defined')
       return False
     return True
 
@@ -215,25 +211,20 @@ class CurveTracerLogic(ScriptedLoadableModuleLogic):
     annotationLogic = slicer.modules.annotations.logic()
     annotationLogic.CreateSnapShot(name, description, type, 1, imageData)
 
-  def run(self, inputVolume, outputVolume, imageThreshold, enableScreenshots=0):
+  def run(self, inputLabelMapNode, inputFiducialNode):
     """
     Run the actual algorithm
     """
 
-    if not self.isValidInputOutputData(inputVolume, outputVolume):
+    if not self.isValidInputOutputData(inputLabelMapNode, inputFiducialNode):
       slicer.util.errorDisplay('Input volume is the same as output volume. Choose a different output volume.')
       return False
 
     logging.info('Processing started')
 
-    # Compute the thresholded output volume using the Threshold Scalar Volume CLI module
-    cliParams = {'InputVolume': inputVolume.GetID(), 'OutputVolume': outputVolume.GetID(), 'ThresholdValue' : imageThreshold, 'ThresholdType' : 'Above'}
-    cliNode = slicer.cli.run(slicer.modules.thresholdscalarvolume, None, cliParams, wait_for_completion=True)
+    print ("run() is called.")
 
-    # Capture screenshot
-    if enableScreenshots:
-      self.takeScreenshot('CurveTracerTest-Start','MyScreenshot',-1)
-
+    
     logging.info('Processing completed')
 
     return True
