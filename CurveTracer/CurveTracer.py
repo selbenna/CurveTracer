@@ -18,7 +18,7 @@ class CurveTracer(ScriptedLoadableModule):
     self.parent.title = "CurveTracer" # TODO make this more human readable by adding spaces
     self.parent.categories = ["Informatics"]
     self.parent.dependencies = []
-    self.parent.contributors = ["Sarah Elbanna (ENSEEIHT), Junichi Tokuda (BWH)"] # replace with "Firstname Lastname (Organization)"
+    self.parent.contributors = ["Sarah Elbenna (ENSEEIHT), Junichi Tokuda (BWH)"] # replace with "Firstname Lastname (Organization)"
     self.parent.helpText = """
     This module traces a curve and lists structures intersecting with it.
     """
@@ -101,6 +101,64 @@ class CurveTracerWidget(ScriptedLoadableModuleWidget):
     self.inputFiducialSelector.setToolTip( "Pick the trajectory." )
     parametersFormLayout.addRow("Trajectory: ", self.inputFiducialSelector)
 
+
+    #
+    # Voxel Table area 
+    #
+    voxelCollapsibleButton = ctk.ctkCollapsibleButton()
+    voxelCollapsibleButton.text = "Voxel Table"
+    voxelCollapsibleButton.collapsed = True
+    self.layout.addWidget(voxelCollapsibleButton)
+    distanceFormLayout = qt.QFormLayout(voxelCollapsibleButton)
+
+    #  - Markups selector for input points
+    distanceLayout = qt.QVBoxLayout()
+    
+    self.targetFiducialsSelector = slicer.qMRMLNodeComboBox()
+    self.targetFiducialsSelector.nodeTypes = ["vtkMRMLMarkupsFiducialNode"]
+    self.targetFiducialsSelector.selectNodeUponCreation = True
+    self.targetFiducialsSelector.addEnabled = True
+    self.targetFiducialsSelector.removeEnabled = True
+    self.targetFiducialsSelector.noneEnabled = True 
+    self.targetFiducialsSelector.showHidden = False
+    self.targetFiducialsSelector.showChildNodeTypes = False
+    self.targetFiducialsSelector.setMRMLScene( slicer.mrmlScene )
+    self.targetFiducialsSelector.setToolTip( "Select Markups for targets" )
+    distanceFormLayout.addWidget(self.targetFiducialsSelector)
+
+    self.targetFiducialsNode = None
+    self.tagDestinationDispNode = None
+    
+    self.targetFiducialsSelector.connect("currentNodeChanged(vtkMRMLNode*)",
+                                         self.onTargetFiducialsSelected)
+
+
+    self.fiducialsTable = qt.QTableWidget(1, 4)
+    self.fiducialsTable.setSelectionBehavior(qt.QAbstractItemView.SelectRows)
+    self.fiducialsTable.setSelectionMode(qt.QAbstractItemView.SingleSelection)
+    self.fiducialsTableHeaders = ["Label", "1", "2", "3"]
+    self.fiducialsTable.setHorizontalHeaderLabels(self.fiducialsTableHeaders)
+    self.fiducialsTable.horizontalHeader().setStretchLastSection(True)
+    distanceLayout.addWidget(self.fiducialsTable)
+
+    self.extrapolateCheckBox = qt.QCheckBox()
+    self.extrapolateCheckBox.checked = 0
+    self.extrapolateCheckBox.setToolTip("Extrapolate the first and last segment to calculate the distance")
+    self.extrapolateCheckBox.connect('toggled(bool)', self.updateTargetFiducialsTable)
+    self.extrapolateCheckBox.text = 'Extrapolate curves to measure the distances'
+
+    self.showErrorVectorCheckBox = qt.QCheckBox()
+    self.showErrorVectorCheckBox.checked = 0
+    self.showErrorVectorCheckBox.setToolTip("Show error vectors, which is defined by the target point and the closest point on the curve. The vector is perpendicular to the curve, unless the closest point is one end of the curve.")
+    self.showErrorVectorCheckBox.connect('toggled(bool)', self.updateTargetFiducialsTable)
+    self.showErrorVectorCheckBox.text = 'Show error vectors'
+
+    distanceLayout.addWidget(self.extrapolateCheckBox)
+    distanceLayout.addWidget(self.showErrorVectorCheckBox)
+    distanceFormLayout.addRow("Distance from:", distanceLayout)
+
+
+
     #
     # Apply Button
     #
@@ -128,13 +186,94 @@ class CurveTracerWidget(ScriptedLoadableModuleWidget):
 
   def onApplyButton(self):
     logic = CurveTracerLogic()
-    logic.run(self.inputLabelSelector.currentNode(), self.inputFiducialSelector.currentNode())
+    logic.GetVoxelValue(self.inputLabelSelector.currentNode(), self.inputFiducialSelector.currentNode())
+
 
   def onReload(self,moduleName="CurveTracer"):
     """Generic reload method for any scripted module.
     ModuleWizard will subsitute correct default moduleName.
     """
     globals()[moduleName] = slicer.util.reloadScriptedModule(moduleName)
+
+
+
+  def onTargetFiducialsSelected(self):
+
+    # Remove observer if previous node exists
+    if self.targetFiducialsNode and self.tag:
+      self.targetFiducialsNode.RemoveObserver(self.tag)
+
+    # Update selected node, add observer, and update control points
+    if self.targetFiducialsSelector.currentNode():
+      self.targetFiducialsNode = self.targetFiducialsSelector.currentNode()
+      self.tag = self.targetFiducialsNode.AddObserver('ModifiedEvent', self.onTargetFiducialsUpdated)
+    else:
+      self.targetFiducialsNode = None
+      self.tag = None
+    self.updateTargetFiducialsTable()
+
+    
+  def onTargetFiducialsUpdated(self,caller,event):
+    if caller.IsA('vtkMRMLMarkupsFiducialNode') and event == 'ModifiedEvent':
+      self.updateTargetFiducialsTable()
+
+
+  def updateTargetFiducialsTable(self):
+
+    logic = CurveTracerLogic()
+
+    if not self.targetFiducialsNode:
+      self.fiducialsTable.clear()
+      self.fiducialsTable.setHorizontalHeaderLabels(self.fiducialsTableHeaders)
+
+    else:
+
+      labell = self.inputLabelSelector
+      fiducial = self.targetFiducialsNode
+      self.fiducialsTableData = []
+      nOfControlPoints = self.targetFiducialsNode.GetNumberOfFiducials()
+
+      if self.fiducialsTable.rowCount != nOfControlPoints:
+        self.fiducialsTable.setRowCount(nOfControlPoints)
+
+      
+      for i in range(nOfControlPoints):
+
+        label = self.targetFiducialsNode.GetNthFiducialLabel(i)
+        pos = [0.0, 0.0, 0.0]
+
+        self.targetFiducialsNode.GetNthFiducialPosition(i,pos)
+        vox = self.logic.GetVoxelValue(labell, fiducial)
+
+        
+        if vox != 0.0:
+          c1 = "1"
+          c2 = "1"
+          c3= "1"
+        else:
+          c1 = "0"
+          c2 = "0"
+          c3 = "0"
+          
+          
+
+        cellLabel = qt.QTableWidgetItem(label)
+        cell1 = qt.QTableWidgetItem(c1)
+        cell2= qt.QTableWidgetItem(c2)
+        cell3 = qt.QTableWidgetItem(c3) 
+        row = [cellLabel, cell1, cell2, cell3]
+
+        self.fiducialsTable.setItem(i, 0, row[0])
+        self.fiducialsTable.setItem(i, 1, row[1])
+        self.fiducialsTable.setItem(i, 2, row[2])
+        self.fiducialsTable.setItem(i, 3, row[3])
+
+        self.fiducialsTableData.append(row)
+        
+    self.fiducialsTable.show()
+
+      
+
     
 #
 # CurveTracerLogic
@@ -149,6 +288,8 @@ class CurveTracerLogic(ScriptedLoadableModuleLogic):
   Uses ScriptedLoadableModuleLogic base class, available at:
   https://github.com/Slicer/Slicer/blob/master/Base/Python/slicer/ScriptedLoadableModule.py
   """
+
+
 
   def hasImageData(self,volumeNode):
     """This is an example logic method that
@@ -211,24 +352,33 @@ class CurveTracerLogic(ScriptedLoadableModuleLogic):
     annotationLogic = slicer.modules.annotations.logic()
     annotationLogic.CreateSnapShot(name, description, type, 1, imageData)
 
-  def run(self, inputLabelMapNode, inputFiducialNode):
+  def GetVoxelValue(self, inputLabelMapNode, inputFiducialNode):
     """
     Run the actual algorithm
     """
-
-    if not self.isValidInputOutputData(inputLabelMapNode, inputFiducialNode):
-      slicer.util.errorDisplay('Input volume is the same as output volume. Choose a different output volume.')
-      return False
 
     logging.info('Processing started')
 
     print ("run() is called.")
 
+
+    nOfFiducials = inputFiducialNode.GetNumberOfFiducials()
     
-    logging.info('Processing completed')
+    for i in range(nOfFiducials):
+      pos = [0.0, 0.0, 0.0]
+      lab = inputFiducialNode.GetNthFiducialLabel(i)
+      inputFiducialNode.GetNthFiducialPosition(i, pos)
+      image = inputLabelMapNode.GetImageData()
+      xyz = [pos[0], pos[1],pos[2], 1.0]
+      matrix = vtk.vtkMatrix4x4()
+      inputLabelMapNode.GetRASToIJKMatrix(matrix)
+      ijk = matrix.MultiplyDoublePoint(xyz)
+      voxel = image.GetScalarComponentAsDouble(int(round(ijk[0])), int(round(ijk[1])), int(round(ijk[2])), 0)
+      return voxel
+    
 
-    return True
 
+  
 
 class CurveTracerTest(ScriptedLoadableModuleTest):
   """
