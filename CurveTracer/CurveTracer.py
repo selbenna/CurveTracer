@@ -228,7 +228,7 @@ class CurveTracerWidget(ScriptedLoadableModuleWidget):
 
     else:
 
-      labell = self.inputLabelSelector
+      labell = self.inputLabelSelector.currentNode()
       fiducial = self.targetFiducialsNode
       self.fiducialsTableData = []
       nOfControlPoints = self.targetFiducialsNode.GetNumberOfFiducials()
@@ -243,7 +243,7 @@ class CurveTracerWidget(ScriptedLoadableModuleWidget):
         pos = [0.0, 0.0, 0.0]
 
         self.targetFiducialsNode.GetNthFiducialPosition(i,pos)
-        vox = self.logic.GetVoxelValue(labell, fiducial)
+        vox = logic.GetVoxelValue(labell, fiducial)
 
         
         if vox != 0.0:
